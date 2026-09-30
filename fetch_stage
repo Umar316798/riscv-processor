@@ -1,0 +1,11 @@
+module fetch_stage #(
+parameter int XLEN = 32
+parameter int IMEM_depth = 256
+
+)(
+
+input logic         clk,
+input logic         rst_n,
+input logic         stall,  //when reset on stall on system is paused
+
+ouput logic         pc_out,
