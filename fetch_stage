@@ -4,8 +4,13 @@ parameter int IMEM_depth = 256
 
 )(
 
-input logic         clk,
-input logic         rst_n,
-input logic         stall,  //when reset on stall on system is paused
+input logic         clk, //clock signal
+input logic         rst_n, //rst=0, reset on
+input logic         stall, // stall=1, stall on
 
-ouput logic         pc_out,
+output logic         pc_out, //location of register
+output logic         instruct_out //instruction set
+
+);
+logic [XLEN-1:0] imem [0:IMEM_DEPTH-1];
+
