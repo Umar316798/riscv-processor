@@ -1,5 +1,5 @@
 module fetch_stage #(
-parameter int XLEN = 32
+parameter int XLEN = 32,
 parameter int IMEM_depth = 256
 
 )(
@@ -8,9 +8,33 @@ input logic         clk, //clock signal
 input logic         rst_n, //rst=0, reset on
 input logic         stall, // stall=1, stall on
 
-output logic         pc_out, //location of register
-output logic         instruct_out //instruction set
+output logic [XLEN-1:0]        pc_out, //location of register
+output logic [XLEN-1:0]        instruct_out //instruction set
 
 );
 logic [XLEN-1:0] imem [0:IMEM_DEPTH-1];
 
+    // 2. Load it from a file at time 0
+    initial begin
+        $readmemh("program.hex", imem); // telling program that values are to be interpreted in hexadecimel
+    end
+ // 3. PC register
+    logic [XLEN-1:0] pc_reg; // pc register 32 bits wide long
+
+// 4. PC update logic
+    always_ff @(posedge clk or negedge rst_n) begin //always have a clock from 0 to 1
+        if (!rst_n) begin // if reset is 0 then fill pc register with 0s
+            pc_reg <= '0;
+        end else if (!stall) begin // if stall is zero system runs normally
+            pc_reg <= pc_reg + XLEN'(4); // 4 bytes
+        end
+    end
+// 5. Memory read
+    always_comb begin //pure math no clock
+        instr_out = imem[pc_reg >> 2]; // for every address divide by 4
+    end
+
+    // 6. Drive pc_out
+    assign pc_out = pc_reg; //connecting input to output
+
+endmodule
