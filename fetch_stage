@@ -1,6 +1,6 @@
 module fetch_stage #(
 parameter int XLEN = 32,
-parameter int IMEM_depth = 256
+parameter int IMEM_DEPTH = 256   // FIX: was IMEM_depth, name must match the use below (case-sensitive)
 
 )(
 
@@ -26,12 +26,14 @@ logic [XLEN-1:0] imem [0:IMEM_DEPTH-1];
         if (!rst_n) begin // if reset is 0 then fill pc register with 0s
             pc_reg <= '0;
         end else if (!stall) begin // if stall is zero system runs normally
-            pc_reg <= pc_reg + XLEN'(4); // 4 bytes
+            pc_reg <= pc_reg + 4; // 4 bytes  (FIX: plain 4, the XLEN'(4) cast was redundant)
         end
     end
 // 5. Memory read
     always_comb begin //pure math no clock
-        instr_out = imem[pc_reg >> 2]; // for every address divide by 4
+        instruct_out = imem[pc_reg[$clog2(IMEM_DEPTH)+1:2]]; // for every address divide by 4
+        // FIX: port is instruct_out (was instr_out). Taking bits [..:2] IS the divide by 4,
+        // and it keeps the index inside the 256-entry array so it never goes out of range
     end
 
     // 6. Drive pc_out
