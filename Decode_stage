@@ -1,1 +1,22 @@
+module insruct_field (
+input logic [31:0] instruct_field,
+output logic [6:0] Opcode,
+output logic [4:0] rd,
+output logic [2:0] funct3,
+output logic [4:0] rs1,
+output logic [4:0] rs2,
+output logic [6:0] funct7,
+
+);
+
+assign opcode = instruct_field[6:0];
+assign opcode = instruct_field[11:7];
+assign opcode = instruct_field[14:12];
+assign opcode = instruct_field[19:15];
+assign opcode = instruct_field[24:20];
+assign opcode = instruct_field[31:25];
+
+endmodule
+
+
 
