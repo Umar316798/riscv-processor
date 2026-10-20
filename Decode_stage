@@ -1,6 +1,6 @@
-module insruct_field (
+module instruct_field (
 input logic [31:0] instruct_field,
-output logic [6:0] Opcode,
+output logic [6:0] opcode,
 output logic [4:0] rd,
 output logic [2:0] funct3,
 output logic [4:0] rs1,
