@@ -1,3 +1,8 @@
+// ============================================================================
+// decode_blocks.sv -- the building blocks of the decode stage
+//   instruct_field, register_file, imm_gen, control_unit
+// ============================================================================
+
 module instruct_field (
   input  logic [31:0] instruct_field,
   output logic [6:0]  opcode,
@@ -16,6 +21,7 @@ module instruct_field (
   assign funct7 = instruct_field[31:25];
 
 endmodule
+
 
 module register_file (
   input  logic        clk,
@@ -43,42 +49,9 @@ module register_file (
 
 endmodule
 
-module imm_gen (
-  input  logic [31:0] instr,
-  output logic [31:0] imm
-);
-  assign imm = { {20{instr[31]}}, instr[31:20] };
-endmodule
 
-module imm_gen_s (
-  input  logic [31:0] instr,
-  output logic [31:0] imm
-);
-  assign imm = { {20{instr[31]}}, instr[31:25], instr[11:7] };
-endmodule
-
-module imm_gen_b (
-  input  logic [31:0] instr,
-  output logic [31:0] imm
-);
-  assign imm = { {19{instr[31]}}, instr[31], instr[7], instr[30:25], instr[11:8], 1'b0 };
-endmodule
-
-module imm_gen_u (
-  input  logic [31:0] instr,
-  output logic [31:0] imm
-);
-  assign imm = { instr[31:12], 12'b0 };
-endmodule
-
-module imm_gen_j (
-  input  logic [31:0] instr,
-  output logic [31:0] imm
-);
-
-assign imm = { {11{instr[31]}}, instr[31], instr[19:12], instr[20], instr[30:21], 1'b0 };
-endmodule
-
+// One imm_gen for all five formats. (The separate imm_gen_s / _b / _u / _j
+// modules were scratch work and are replaced by the case below.)
 module imm_gen (
   input  logic [31:0] instr,
   output logic [31:0] imm
@@ -100,10 +73,11 @@ module imm_gen (
 
       7'b0110111,                 // lui               (U-type)
       7'b0010111:                 // auipc             (U-type)
-        imm ={ instr[31:12], 12'b0 };           //  U-type line
+        imm = { instr[31:12], 12'b0 };
 
       7'b1101111:                 // jal               (J-type)
-  imm = {11{instr[31]}}, instr[31], instr[19:12], instr[20], instr[30:21], 1'b0 };
+        imm = { {11{instr[31]}}, instr[31], instr[19:12], instr[20], instr[30:21], 1'b0 };
+
       default:
         imm = 32'b0;              // R-type and anything else: no immediate
 
@@ -111,3 +85,87 @@ module imm_gen (
   end
 
 endmodule
+
+
+module control_unit (
+  input  logic [6:0] opcode,
+  output logic       reg_write,
+  output logic       alu_src,
+  output logic [1:0] alu_a_sel,     // 0: rs1, 1: PC, 2: zero
+  output logic       mem_read,
+  output logic       mem_write,
+  output logic       mem_to_reg,
+  output logic       branch,
+  output logic       jump
+);
+
+  always_comb begin
+    // defaults: everything off, ALU's first input is rs1
+    reg_write  = 1'b0;
+    alu_src    = 1'b0;
+    alu_a_sel  = 2'd0;
+    mem_read   = 1'b0;
+    mem_write  = 1'b0;
+    mem_to_reg = 1'b0;
+    branch     = 1'b0;
+    jump       = 1'b0;
+
+    case (opcode)
+
+      7'b0110011: begin     // R-type
+        reg_write = 1'b1;
+      end
+
+      7'b0010011: begin     // I-type ALU
+        reg_write = 1'b1;
+        alu_src   = 1'b1;
+      end
+
+      7'b0000011: begin     // load
+        reg_write  = 1'b1;
+        alu_src    = 1'b1;
+        mem_read   = 1'b1;
+        mem_to_reg = 1'b1;
+      end
+
+      7'b0100011: begin     // store
+        alu_src   = 1'b1;
+        mem_write = 1'b1;
+      end
+
+      7'b1100011: begin     // branches
+        branch = 1'b1;
+      end
+
+      7'b1101111: begin     // jal: target = PC + imm, link into rd
+        reg_write = 1'b1;
+        alu_src   = 1'b1;
+        alu_a_sel = 2'd1;
+        jump      = 1'b1;
+      end
+
+      7'b1100111: begin     // jalr: target = rs1 + imm, link into rd
+        reg_write = 1'b1;
+        alu_src   = 1'b1;
+        jump      = 1'b1;
+      end
+
+      7'b0110111: begin     // lui: 0 + imm
+        reg_write = 1'b1;
+        alu_src   = 1'b1;
+        alu_a_sel = 2'd2;
+      end
+
+      7'b0010111: begin     // auipc: PC + imm
+        reg_write = 1'b1;
+        alu_src   = 1'b1;
+        alu_a_sel = 2'd1;
+      end
+
+      default: ;
+
+    endcase
+  end
+
+endmodule
+ 
