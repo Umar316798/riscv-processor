@@ -1,295 +1,255 @@
 // ============================================================================
 // decode_blocks.sv -- the building blocks of the decode stage
-//   instruct_field, register_file, imm_gen, control_unit
+// instruct_field, register_file, imm_gen, control_unit
 // ============================================================================
-
 module instruct_field (
-  input  logic [31:0] instruct_field,
-  output logic [6:0]  opcode,
-  output logic [4:0]  rd,
-  output logic [2:0]  funct3,
-  output logic [4:0]  rs1,
-  output logic [4:0]  rs2,
-  output logic [6:0]  funct7
+    input logic [31:0] instr, // Fixed: Renamed from instruct_field to avoid conflict
+    output logic [6:0] opcode,
+    output logic [4:0] rd,
+    output logic [2:0] funct3,
+    output logic [4:0] rs1,
+    output logic [4:0] rs2,
+    output logic [6:0] funct7
 );
-
-  assign opcode = instruct_field[6:0];
-  assign rd     = instruct_field[11:7];
-  assign funct3 = instruct_field[14:12];
-  assign rs1    = instruct_field[19:15];
-  assign rs2    = instruct_field[24:20];
-  assign funct7 = instruct_field[31:25];
-
+    assign opcode = instr[6:0];
+    assign rd     = instr[11:7];
+    assign funct3 = instr[14:12];
+    assign rs1    = instr[19:15];
+    assign rs2    = instr[24:20];
+    assign funct7 = instr[31:25];
 endmodule
-
 
 module register_file (
-  input  logic        clk,
-  input  logic        we,
-  input  logic [4:0]  waddr,
-  input  logic [31:0] wdata,
-  input  logic [4:0]  raddr1,
-  input  logic [4:0]  raddr2,
-  output logic [31:0] rdata1,
-  output logic [31:0] rdata2
+    input logic clk,
+    input logic we,
+    input logic [4:0] waddr,
+    input logic [31:0] wdata,
+    input logic [4:0] raddr1,
+    input logic [4:0] raddr2,
+    output logic [31:0] rdata1,
+    output logic [31:0] rdata2
 );
+    logic [31:0] regs [0:31];
 
-  logic [31:0] regs [0:31];   // 32 registers, each 32 bits wide
-
-  // write: on the rising clock edge, only if we is 1 and the target is not x0
-  always_ff @(posedge clk) begin
-    if (we && waddr != 5'd0) begin
-      regs[waddr] <= wdata;
+    // write: on the rising clock edge, only if we is 1 and the target is not x0
+    always_ff @(posedge clk) begin
+        if (we && waddr != 5'd0) begin
+            regs[waddr] <= wdata;
+        end
     end
-  end
 
-  // reads: no clock; register 0 always reads as 0
-  assign rdata1 = (raddr1 == 5'd0) ? 32'd0 : regs[raddr1];
-  assign rdata2 = (raddr2 == 5'd0) ? 32'd0 : regs[raddr2];
-
+    // reads: no clock; register 0 always reads as 0
+    assign rdata1 = (raddr1 == 5'd0) ? 32'd0 : regs[raddr1];
+    assign rdata2 = (raddr2 == 5'd0) ? 32'd0 : regs[raddr2];
 endmodule
 
-
-// One imm_gen for all five formats. (The separate imm_gen_s / _b / _u / _j
-// modules were scratch work and are replaced by the case below.)
 module imm_gen (
-  input  logic [31:0] instr,
-  output logic [31:0] imm
+    input logic [31:0] instr,
+    output logic [31:0] imm
 );
-
-  always_comb begin
-    case (instr[6:0])
-
-      7'b0010011,                 // addi, andi, ...   (I-type)
-      7'b0000011,                 // lw, lb, ...       (I-type)
-      7'b1100111:                 // jalr              (I-type)
-        imm = { {20{instr[31]}}, instr[31:20] };
-
-      7'b0100011:                 // sw, sb, ...       (S-type)
-        imm = { {20{instr[31]}}, instr[31:25], instr[11:7] };
-
-      7'b1100011:                 // beq, bne, ...     (B-type)
-        imm = { {19{instr[31]}}, instr[31], instr[7], instr[30:25], instr[11:8], 1'b0 };
-
-      7'b0110111,                 // lui               (U-type)
-      7'b0010111:                 // auipc             (U-type)
-        imm = { instr[31:12], 12'b0 };
-
-      7'b1101111:                 // jal               (J-type)
-        imm = { {11{instr[31]}}, instr[31], instr[19:12], instr[20], instr[30:21], 1'b0 };
-
-      default:
-        imm = 32'b0;              // R-type and anything else: no immediate
-
-    endcase
-  end
-
+    always_comb begin
+        case (instr[6:0])
+            7'b0010011, // addi, andi, ... (I-type)
+            7'b0000011, // lw, lb, ... (I-type)
+            7'b1100111: // jalr (I-type)
+                imm = { {20{instr[31]}}, instr[31:20] };
+            7'b0100011: // sw, sb, ... (S-type)
+                imm = { {20{instr[31]}}, instr[31:25], instr[11:7] };
+            7'b1100011: // beq, bne, ... (B-type)
+                imm = { {19{instr[31]}}, instr[31], instr[7], instr[30:25], instr[11:8], 1'b0 };
+            7'b0110111, // lui (U-type)
+            7'b0010111: // auipc (U-type)
+                imm = { instr[31:12], 12'b0 };
+            7'b1101111: // jal (J-type)
+                imm = { {11{instr[31]}}, instr[31], instr[19:12], instr[20], instr[30:21], 1'b0 };
+            default: 
+                imm = 32'b0; // R-type and anything else: no immediate
+        endcase
+    end
 endmodule
-
 
 module control_unit (
-  input  logic [6:0] opcode,
-  output logic       reg_write,
-  output logic       alu_src,
-  output logic [1:0] alu_a_sel,     // 0: rs1, 1: PC, 2: zero
-  output logic       mem_read,
-  output logic       mem_write,
-  output logic       mem_to_reg,
-  output logic       branch,
-  output logic       jump
+    input logic [6:0] opcode,
+    output logic reg_write,
+    output logic alu_src,
+    output logic [1:0] alu_a_sel, // 0: rs1, 1: PC, 2: zero
+    output logic mem_read,
+    output logic mem_write,
+    output logic mem_to_reg,
+    output logic branch,
+    output logic jump
 );
+    always_comb begin
+        // defaults: everything off, ALU's first input is rs1
+        reg_write  = 1'b0;
+        alu_src    = 1'b0;
+        alu_a_sel  = 2'd0;
+        mem_read   = 1'b0;
+        mem_write  = 1'b0;
+        mem_to_reg = 1'b0;
+        branch     = 1'b0;
+        jump       = 1'b0;
 
-  always_comb begin
-    // defaults: everything off, ALU's first input is rs1
-    reg_write  = 1'b0;
-    alu_src    = 1'b0;
-    alu_a_sel  = 2'd0;
-    mem_read   = 1'b0;
-    mem_write  = 1'b0;
-    mem_to_reg = 1'b0;
-    branch     = 1'b0;
-    jump       = 1'b0;
-
-    case (opcode)
-
-      7'b0110011: begin     // R-type
-        reg_write = 1'b1;
-      end
-
-      7'b0010011: begin     // I-type ALU
-        reg_write = 1'b1;
-        alu_src   = 1'b1;
-      end
-
-      7'b0000011: begin     // load
-        reg_write  = 1'b1;
-        alu_src    = 1'b1;
-        mem_read   = 1'b1;
-        mem_to_reg = 1'b1;
-      end
-
-      7'b0100011: begin     // store
-        alu_src   = 1'b1;
-        mem_write = 1'b1;
-      end
-
-      7'b1100011: begin     // branches
-        branch = 1'b1;
-      end
-
-      7'b1101111: begin     // jal: target = PC + imm, link into rd
-        reg_write = 1'b1;
-        alu_src   = 1'b1;
-        alu_a_sel = 2'd1;
-        jump      = 1'b1;
-      end
-
-      7'b1100111: begin     // jalr: target = rs1 + imm, link into rd
-        reg_write = 1'b1;
-        alu_src   = 1'b1;
-        jump      = 1'b1;
-      end
-
-      7'b0110111: begin     // lui: 0 + imm
-        reg_write = 1'b1;
-        alu_src   = 1'b1;
-        alu_a_sel = 2'd2;
-      end
-
-      7'b0010111: begin     // auipc: PC + imm
-        reg_write = 1'b1;
-        alu_src   = 1'b1;
-        alu_a_sel = 2'd1;
-      end
-
-      default: ;
-
-    endcase
-  end
-
+        case (opcode)
+            7'b0110011: begin // R-type
+                reg_write = 1'b1;
+            end
+            7'b0010011: begin // I-type ALU
+                reg_write = 1'b1;
+                alu_src   = 1'b1;
+            end
+            7'b0000011: begin // load
+                reg_write  = 1'b1;
+                alu_src    = 1'b1;
+                mem_read   = 1'b1;
+                mem_to_reg = 1'b1;
+            end
+            7'b0100011: begin // store
+                alu_src   = 1'b1;
+                mem_write = 1'b1;
+            end
+            7'b1100011: begin // branches
+                branch = 1'b1;
+            end
+            7'b1101111: begin // jal: target = PC + imm, link into rd
+                reg_write = 1'b1;
+                alu_src   = 1'b1;
+                alu_a_sel = 2'd1;
+                jump      = 1'b1;
+            end
+            7'b1100111: begin // jalr: target = rs1 + imm, link into rd
+                reg_write = 1'b1;
+                alu_src   = 1'b1;
+                jump      = 1'b1;
+            end
+            7'b0110111: begin // lui: 0 + imm
+                reg_write = 1'b1;
+                alu_src   = 1'b1;
+                alu_a_sel = 2'd2;
+            end
+            7'b0010111: begin // auipc: PC + imm
+                reg_write = 1'b1;
+                alu_src   = 1'b1;
+                alu_a_sel = 2'd1;
+            end
+            default: ;
+        endcase
+    end
 endmodule
 
 // ============================================================================
 // decode_stage.sv -- Stage 2 (ID) + the ID/EX pipeline register
-// Uses the blocks in decode_blocks.sv:
-//   instruct_field, register_file, imm_gen, control_unit
 // ============================================================================
 module decode_stage (
-  input  logic        clk,
-  input  logic        rst_n,
-
-  // from the IF/ID register (Fetch)
-  input  logic [31:0] pc_id,
-  input  logic [31:0] instr_id,
-
-  // from Writeback (register write)
-  input  logic        reg_write_wb,
-  input  logic [4:0]  rd_wb,
-  input  logic [31:0] wdata_wb,
-
-  // from the hazard logic / thermal governor
-  input  logic        stall,       // 1: hold the ID/EX register
-  input  logic        flush,       // 1: turn this instruction into a bubble
-
-  // early outputs, for the hazard unit (read before the ID/EX register)
-  output logic [4:0]  rs1_id,
-  output logic [4:0]  rs2_id,
-
-  // ID/EX register outputs -> Execute
-  output logic [31:0] pc_ex,
-  output logic [31:0] rs1_data_ex,
-  output logic [31:0] rs2_data_ex,
-  output logic [31:0] imm_ex,
-  output logic [4:0]  rd_ex,
-  output logic [2:0]  funct3_ex,
-  output logic [6:0]  funct7_ex,
-
-  // control signals -> Execute / Memory / Writeback
-  output logic        reg_write_ex,
-  output logic        alu_src_ex,
-  output logic [1:0]  alu_a_sel_ex,
-  output logic        mem_read_ex,
-  output logic        mem_write_ex,
-  output logic        mem_to_reg_ex,
-  output logic        branch_ex,
-  output logic        jump_ex
+    input logic clk,
+    input logic rst_n,
+    input logic [31:0] pc_id,
+    input logic [31:0] instr_id,
+    input logic reg_write_wb,
+    input logic [4:0] rd_wb,
+    input logic [31:0] wdata_wb,
+    input logic stall,
+    input logic flush,
+    output logic [4:0] rs1_id,
+    output logic [4:0] rs2_id,
+    output logic [31:0] pc_ex,
+    output logic [31:0] rs1_data_ex,
+    output logic [31:0] rs2_data_ex,
+    output logic [31:0] imm_ex,
+    output logic [4:0] rd_ex,
+    output logic [2:0] funct3_ex,
+    output logic [6:0] funct7_ex,
+    output logic reg_write_ex,
+    output logic alu_src_ex,
+    output logic [1:0] alu_a_sel_ex,
+    output logic mem_read_ex,
+    output logic mem_write_ex,
+    output logic mem_to_reg_ex,
+    output logic branch_ex,
+    output logic jump_ex
 );
 
-  // ---- wires between the blocks (everything here is still in the ID stage) ----
-  logic [6:0]  opcode;
-  logic [4:0]  rd;
-  logic [2:0]  funct3;
-  logic [6:0]  funct7;
-  logic [31:0] rdata1, rdata2;
-  logic [31:0] imm;
+    logic [6:0] opcode;
+    logic [4:0] rd;
+    logic [2:0] funct3;
+    logic [6:0] funct7;
+    logic [31:0] rdata1, rdata2;
+    logic [31:0] imm;
+    logic reg_write, alu_src, mem_read, mem_write, mem_to_reg, branch, jump;
+    logic [1:0] alu_a_sel;
 
-  logic        reg_write, alu_src, mem_read, mem_write, mem_to_reg, branch, jump;
-  logic [1:0]  alu_a_sel;
+    instruct_field u_fields (
+        .instr          (instr_id), // Fixed connection here
+        .opcode         (opcode),
+        .rd             (rd),
+        .funct3         (funct3),
+        .rs1            (rs1_id),
+        .rs2            (rs2_id),
+        .funct7         (funct7)
+    );
 
-  // ---- the four blocks ----
-  instruct_field u_fields (
-    .instruct_field (instr_id),
-    .opcode (opcode), .rd (rd), .funct3 (funct3),
-    .rs1 (rs1_id), .rs2 (rs2_id), .funct7 (funct7)
-  );
+    register_file u_rf (
+        .clk    (clk),
+        .we     (reg_write_wb),
+        .waddr  (rd_wb),
+        .wdata  (wdata_wb),
+        .raddr1 (rs1_id),
+        .raddr2 (rs2_id),
+        .rdata1 (rdata1),
+        .rdata2 (rdata2)
+    );
 
-  register_file u_rf (
-    .clk (clk),
-    .we (reg_write_wb), .waddr (rd_wb), .wdata (wdata_wb),   // write side, from Writeback
-    .raddr1 (rs1_id),   .raddr2 (rs2_id),                    // read side
-    .rdata1 (rdata1),   .rdata2 (rdata2)
-  );
+    imm_gen u_imm (
+        .instr  (instr_id),
+        .imm    (imm)
+    );
 
-  imm_gen u_imm (
-    .instr (instr_id),
-    .imm (imm)
-  );
+    u_ctrl (
+        .opcode     (opcode),
+        .reg_write  (reg_write),
+        .alu_src    (alu_src),
+        .alu_a_sel  (alu_a_sel),
+        .mem_read   (mem_read),
+        .mem_write  (mem_write),
+        .mem_to_reg (mem_to_reg),
+        .branch     (branch),
+        .jump       (jump)
+    );
 
-  control_unit u_ctrl (
-    .opcode (opcode),
-    .reg_write (reg_write), .alu_src (alu_src), .alu_a_sel (alu_a_sel),
-    .mem_read (mem_read), .mem_write (mem_write), .mem_to_reg (mem_to_reg),
-    .branch (branch), .jump (jump)
-  );
-
-  // ---- ID/EX pipeline register ----
-  always_ff @(posedge clk) begin
-    if (!rst_n || flush) begin
-      // a bubble: all control signals off, so nothing happens in later stages
-      pc_ex         <= '0;
-      rs1_data_ex   <= '0;
-      rs2_data_ex   <= '0;
-      imm_ex        <= '0;
-      rd_ex         <= '0;
-      funct3_ex     <= '0;
-      funct7_ex     <= '0;
-      reg_write_ex  <= 1'b0;
-      alu_src_ex    <= 1'b0;
-      alu_a_sel_ex  <= 2'd0;
-      mem_read_ex   <= 1'b0;
-      mem_write_ex  <= 1'b0;
-      mem_to_reg_ex <= 1'b0;
-      branch_ex     <= 1'b0;
-      jump_ex       <= 1'b0;
-    end else if (!stall) begin
-      pc_ex         <= pc_id;
-      rs1_data_ex   <= rdata1;
-      rs2_data_ex   <= rdata2;
-      imm_ex        <= imm;
-      rd_ex         <= rd;
-      funct3_ex     <= funct3;
-      funct7_ex     <= funct7;
-      reg_write_ex  <= reg_write;
-      alu_src_ex    <= alu_src;
-      alu_a_sel_ex  <= alu_a_sel;
-      mem_read_ex   <= mem_read;
-      mem_write_ex  <= mem_write;
-      mem_to_reg_ex <= mem_to_reg;
-      branch_ex     <= branch;
-      jump_ex       <= jump;
+    always_ff @(posedge clk) begin
+        if (!rst_n || flush) begin
+            pc_ex          <= '0;
+            rs1_data_ex    <= '0;
+            rs2_data_ex    <= '0;
+            imm_ex         <= '0;
+            rd_ex          <= '0;
+            funct3_ex      <= '0;
+            funct7_ex      <= '0;
+            reg_write_ex   <= 1'b0;
+            alu_src_ex     <= 1'b0;
+            alu_a_sel_ex   <= 2'd0;
+            mem_read_ex    <= 1'b0;
+            mem_write_ex   <= 1'b0;
+            mem_to_reg_ex  <= 1'b0;
+            branch_ex      <= 1'b0;
+            jump_ex        <= 1'b0;
+        end else if (!stall) begin
+            pc_ex          <= pc_id;
+            rs1_data_ex    <= rdata1;
+            rs2_data_ex    <= rdata2;
+            imm_ex         <= imm;
+            rd_ex          <= rd;
+            funct3_ex      <= funct3;
+            funct7_ex      <= funct7;
+            reg_write_ex   <= reg_write;
+            alu_src_ex     <= alu_src;
+            alu_a_sel_ex   <= alu_a_sel;
+            mem_read_ex    <= mem_read;
+            mem_write_ex   <= mem_write;
+            mem_to_reg_ex  <= mem_to_reg;
+            branch_ex      <= branch;
+            jump_ex        <= jump;
+        end
     end
-    // if stall: do nothing, so every register holds its old value
-  end
-
 endmodule
- 
+
